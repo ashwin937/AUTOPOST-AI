@@ -1,12 +1,16 @@
 """
 AI Agent for processing natural language commands and guiding users through posting workflow.
 """
-from anthropic import Anthropic
+import google.generativeai as genai
 from config import settings
 import json
 import re
 
-client = Anthropic() if settings.ANTHROPIC_API_KEY else None
+if settings.GEMINI_API_KEY:
+    genai.configure(api_key=settings.GEMINI_API_KEY)
+    model = genai.GenerativeModel("gemini-pro")
+else:
+    model = None
 
 class PostingAgent:
     def __init__(self):
@@ -85,14 +89,11 @@ Return your response in JSON format:
 }}"""
         
         try:
-            if client:
-                response = client.messages.create(
-                    model="claude-sonnet-4-20250514",
-                    max_tokens=500,
-                    system=system_prompt,
-                    messages=self.conversation_history
+            if model:
+                response = model.generate_content(
+                    system_prompt + "\n\n" + user_message
                 )
-                agent_response = response.content[0].text
+                agent_response = response.text
             else:
                 # Mock response for testing
                 agent_response = self._mock_agent_response(user_message)

@@ -36,7 +36,7 @@ app.include_router(agent.router)
 async def on_startup():
     print("✅ AutoPost AI Backend Started")
     print("📱 Social Media APIs Ready")
-    print("🤖 Claude AI Integration Active")
+    print("🤖 Google Gemini AI Integration Active")
     # Start scheduler task
     app.state.scheduler_task = asyncio.create_task(run_scheduler())
 

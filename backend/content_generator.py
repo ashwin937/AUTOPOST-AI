@@ -1,14 +1,18 @@
-from anthropic import Anthropic
+import google.generativeai as genai
 from config import settings
 import json
 
-client = Anthropic() if settings.ANTHROPIC_API_KEY else None
+if settings.GEMINI_API_KEY:
+    genai.configure(api_key=settings.GEMINI_API_KEY)
+    model = genai.GenerativeModel("gemini-pro")
+else:
+    model = None
 
 def generate_platform_content(image_description: str, platforms: list, tone: str = "professional"):
     """
-    Generate platform-specific content using Claude
+    Generate platform-specific content using Google Gemini
     """
-    if not client:
+    if not model:
         return get_mock_content(platforms, tone)
     
     platform_prompt = {
@@ -31,22 +35,15 @@ Only include keys for the requested platforms.
 Make content platform-native and authentic to each channel."""
     
     try:
-        message = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=2000,
-            messages=[
-                {"role": "user", "content": prompt}
-            ]
-        )
-        
-        content = message.content[0].text
+        response = model.generate_content(prompt)
+        content = response.text
         # Parse JSON from response
         import re
         json_match = re.search(r'\{.*\}', content, re.DOTALL)
         if json_match:
             return json.loads(json_match.group())
     except Exception as e:
-        print(f"Claude API error: {e}")
+        print(f"Gemini API error: {e}")
     
     return get_mock_content(platforms, tone)
 

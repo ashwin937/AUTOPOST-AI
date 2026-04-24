@@ -3,15 +3,18 @@ from pydantic import BaseModel
 from typing import List, Dict, Any
 import os
 from dotenv import load_dotenv
-from anthropic import Anthropic
+import google.generativeai as genai
 from vector_db import get_similar_posts
 
 load_dotenv()
 
 router = APIRouter()
 
-ANTHROPIC_KEY = os.getenv("ANTHROPIC_API_KEY")
-CLAUDE_MODEL = "claude-sonnet-4-20250514"
+GEMINI_KEY = os.getenv("GEMINI_API_KEY")
+GEMINI_MODEL = "gemini-pro"
+
+if GEMINI_KEY:
+    genai.configure(api_key=GEMINI_KEY)
 
 
 class GenerateRequest(BaseModel):
@@ -40,13 +43,13 @@ async def generate(req: GenerateRequest) -> Dict[str, List[str]]:
     }
 
     # If no API key, return mocked variants to allow local dev
-    if not ANTHROPIC_KEY:
+    if not GEMINI_KEY:
         for p in req.platforms:
             variants = [f"{req.topic} — {req.tone} variant {i+1} for {p}" for i in range(3)]
             outputs[p] = variants
         return outputs
 
-    client = Anthropic(api_key=ANTHROPIC_KEY)
+    model = genai.GenerativeModel(GEMINI_MODEL)
 
     # Build a single prompt that requests 3 variants per platform
     for platform in req.platforms:
@@ -57,14 +60,10 @@ async def generate(req: GenerateRequest) -> Dict[str, List[str]]:
             f"Return each variant on a separate line, numbered 1, 2, 3. No additional text."
         )
         try:
-            resp = client.messages.create(
-                model=CLAUDE_MODEL,
-                max_tokens=300,
-                temperature=0.7,
-                system=system_prompt,
-                messages=[{"role": "user", "content": user_message}]
+            resp = model.generate_content(
+                f"{system_prompt}\n\n{user_message}"
             )
-            text = resp.content[0].text
+            text = resp.text
             # split lines and parse variants
             lines = [line.strip() for line in text.splitlines() if line.strip()]
             variants = []
@@ -78,7 +77,7 @@ async def generate(req: GenerateRequest) -> Dict[str, List[str]]:
                 variants.append(f"{req.topic} ({platform}) - variant {len(variants)+1}")
             outputs[platform] = variants[:3]
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Claude API error: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Gemini API error: {str(e)}")
 
     # Ensure all platforms keys exist
     for key in outputs.keys():

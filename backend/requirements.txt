@@ -2,7 +2,7 @@ fastapi
 uvicorn
 chromadb
 sentence-transformers
-anthropic
+google-generativeai
 python-dotenv
 pydantic
 pillow

@@ -174,40 +174,24 @@ async def validate_image(file_path: str) -> dict:
 async def describe_image(image_path: str) -> str:
     """Get AI-generated description of image"""
     try:
-        if not settings.ANTHROPIC_API_KEY:
+        if not settings.GEMINI_API_KEY:
             return "Professional content image"
         
-        from anthropic import Anthropic
-        client = Anthropic()
+        import google.generativeai as genai
+        genai.configure(api_key=settings.GEMINI_API_KEY)
+        model = genai.GenerativeModel("gemini-pro-vision")
         
-        # Read and encode image
-        import base64
+        # Read image file
         with open(image_path, 'rb') as f:
-            image_data = base64.standard_b64encode(f.read()).decode("utf-8")
+            image_data = f.read()
         
-        # Detect image type
-        import mimetypes
-        media_type, _ = mimetypes.guess_type(image_path)
-        if not media_type:
-            media_type = "image/jpeg"
+        # Upload and describe image
+        message = model.generate_content([
+            "Please analyze this image and provide a detailed description suitable for social media captions.",
+            {"mime_type": "image/jpeg", "data": image_data}
+        ])
         
-        message = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=300,
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "image",
-                            "source": {
-                                "type": "base64",
-                                "media_type": media_type,
-                                "data": image_data,
-                            },
-                        },
-                        {
-                            "type": "text",
+        return message.text if message else "Professional content image"
                             "text": "Briefly describe this image in 1-2 sentences for social media content creation."
                         }
                     ],
