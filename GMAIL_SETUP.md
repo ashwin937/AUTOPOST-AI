@@ -1,42 +1,57 @@
-# 📧 Gmail Integration Guide
+# 📧 Gmail Integration Guide (OAuth 2.0)
 
 ## Overview
 
-AutoPost AI now supports sending emails directly through the AI Agent! The agent can understand natural language commands like:
+AutoPost AI now supports sending emails through the AI Agent using **OAuth 2.0 authentication**. The agent can understand natural language commands like:
 
 - "Send an email to john@example.com about this"
 - "Mail this to my manager with a professional tone"
-- "Email to client@company.com - schedule it for tomorrow"
+- "Email to client@company.com - with subject line"
 
 ## Setup Instructions
 
-### Step 1: Enable Gmail
+### Step 1: Create Google Cloud Project
 
-Add these to your `backend/.env` file:
+1. Go to: https://console.cloud.google.com/
+2. Click "Create Project" and name it "AutoPost AI"
+3. Wait for project to be created
 
-```env
-GMAIL_FROM_EMAIL=your_gmail_address@gmail.com
-GMAIL_APP_PASSWORD=your_app_password_here
-```
+### Step 2: Enable Gmail API
 
-### Step 2: Generate Gmail App Password
+1. In Google Cloud Console, search for "Gmail API"
+2. Click on "Gmail API"
+3. Click "ENABLE"
+4. Go to "Credentials" (left sidebar)
+5. Click "Create Credentials" → "OAuth 2.0 Client ID"
+6. Choose "Desktop application"
+7. Download the JSON file (this is your credentials file)
 
-1. Go to: https://myaccount.google.com/apppasswords
-2. Select "Mail" and "Windows Computer" (or your device)
-3. Google will generate a 16-character app password
-4. Copy this password to `GMAIL_APP_PASSWORD` in `.env`
+### Step 3: Add Credentials to Project
 
-⚠️ **Important**: Use the App Password, NOT your regular Gmail password!
+1. Download the credentials JSON file from Google Cloud Console
+2. Save it to: `backend/gmail_credentials.json`
+3. Add to `backend/.env`:
+   ```env
+   GMAIL_FROM_EMAIL=your_gmail@gmail.com
+   GMAIL_CREDENTIALS_PATH=gmail_credentials.json
+   GMAIL_TOKEN_PATH=gmail_token.pickle
+   ```
 
-### Step 3: Verify Configuration
+### Step 4: First-Time Authentication
 
-Test by checking if the backend starts without errors:
+1. Run backend for the first time with Gmail configured:
+   ```bash
+   cd backend
+   source venv/bin/activate
+   pip install -r requirements.txt
+   python -m uvicorn main:app --reload
+   ```
 
-```bash
-cd backend
-source venv/bin/activate
-python -c "from config import settings; print(f'Gmail: {settings.GMAIL_FROM_EMAIL}')"
-```
+2. When you send the first email, a browser window will open
+3. Sign in with your Gmail account
+4. Grant permissions to AutoPost AI
+5. The token will be saved to `gmail_token.pickle`
+6. Future emails will use this token (no interaction needed)
 
 ---
 
@@ -47,13 +62,20 @@ python -c "from config import settings; print(f'Gmail: {settings.GMAIL_FROM_EMAI
 Chat with the agent to send emails:
 
 ```
-User: "Send an email to john@example.com about this image"
+User: "Send email to john@example.com about this image"
 Agent: "I'll help! What tone would you like? (professional, casual, funny, inspirational)"
 User: "professional"
 Agent: "Perfect! I'll generate a professional email. Ready to send?"
 ```
 
-### 2. Auto-Generated Email Content
+### 2. OAuth 2.0 Security
+
+✅ **Secure**: User grants permission explicitly
+✅ **No passwords stored**: Uses OAuth tokens instead
+✅ **Revokable**: User can revoke access anytime
+✅ **Scoped**: Only has permission to send emails (not read/delete)
+
+### 3. Auto-Generated Email Content
 
 The agent uses Gemini AI to:
 - Generate subject lines
@@ -61,7 +83,7 @@ The agent uses Gemini AI to:
 - Optimize tone and messaging
 - Optional image attachments
 
-### 3. Email Endpoints
+### 4. Email Endpoints
 
 **Send Email via Agent:**
 ```bash
@@ -77,7 +99,7 @@ custom_body: "..."  # Optional - AI generates if empty
 ```json
 {
   "success": true,
-  "message_id": "gmail_1234567890",
+  "message_id": "18f9e8c7e4c5a2b1d9",
   "recipient": "john@example.com",
   "subject": "Check out this amazing content!",
   "message": "✅ Email sent successfully to john@example.com!"
@@ -124,7 +146,7 @@ Agent: "✅ Email sent!"
 
 ### Example 2: Custom Message
 ```
-User: "Send email to team@startup.io with custom subject: Quarterly Update"
+User: "Send email to team@startup.io with subject: Quarterly Update"
 Agent: Uses provided subject, generates body
 Result: "✅ Email sent to team@startup.io"
 ```
@@ -140,25 +162,28 @@ Result: "✅ Email sent with funny tone!"
 
 ## Troubleshooting
 
-### "Gmail authentication failed"
-- Check that `GMAIL_APP_PASSWORD` is correct (16 characters)
-- Use App Password, NOT regular Gmail password
-- Regenerate password if needed: https://myaccount.google.com/apppasswords
+### "Credentials file not found"
+- Ensure `gmail_credentials.json` is in `backend/` directory
+- Check file path in `.env`: `GMAIL_CREDENTIALS_PATH=gmail_credentials.json`
 
-### "Gmail not configured"
-- Verify `GMAIL_FROM_EMAIL` is set in `.env`
-- Check `GMAIL_APP_PASSWORD` exists
-- Restart backend after adding credentials
+### "OAuth window didn't open"
+- First email requires browser interaction
+- Look for console message with authentication URL
+- Visit URL manually if popup doesn't appear
 
-### Email not sending
-- Verify credentials are correct
-- Check recipient email is valid
-- Look for error message in logs
-- Try with a different recipient to isolate issue
+### "Invalid grant - token expired"
+- Delete `gmail_token.pickle` to reset
+- Next email will prompt for re-authentication
 
-### "No image uploaded"
-- For email with attachment: Upload image first, then send
-- For email without image: System will send plain email
+### "Gmail API not enabled"
+- Go to https://console.cloud.google.com/apis/library
+- Search "Gmail API"
+- Click "ENABLE" if not already enabled
+
+### Email not sending after authentication
+- Verify recipient email is valid
+- Check console for error messages
+- Ensure Gmail account has capacity to send
 
 ---
 
@@ -192,6 +217,52 @@ All sent emails are stored in the database with:
 - Timestamp
 - Image attachment info
 
+### 4. Revoking Access
+
+If you want to revoke access:
+1. Go to: https://myaccount.google.com/permissions
+2. Find "AutoPost AI"
+3. Click "Remove access"
+4. Delete `gmail_token.pickle`
+5. Next email will require re-authentication
+
+---
+
+## Security Best Practices
+
+✅ **DO:**
+- Store credentials JSON securely
+- Add `.env` and `*.pickle` to `.gitignore` (already done)
+- Use limited OAuth scopes (only send emails)
+- Delete token file if you switch Gmail accounts
+- Review permissions regularly
+
+❌ **DON'T:**
+- Share credentials JSON file
+- Commit `.env` to git
+- Use app passwords (use OAuth instead)
+- Store tokens in public locations
+- Share token files
+
+---
+
+## Environment Variables
+
+```env
+# Gmail Configuration
+GMAIL_FROM_EMAIL=your_gmail@gmail.com
+GMAIL_CREDENTIALS_PATH=gmail_credentials.json
+GMAIL_TOKEN_PATH=gmail_token.pickle
+```
+
+### What Each Variable Means:
+
+| Variable | Purpose | Example |
+|----------|---------|---------|
+| `GMAIL_FROM_EMAIL` | Email to send from | user@gmail.com |
+| `GMAIL_CREDENTIALS_PATH` | Location of OAuth credentials | gmail_credentials.json |
+| `GMAIL_TOKEN_PATH` | Location to save refresh token | gmail_token.pickle |
+
 ---
 
 ## API Reference
@@ -224,32 +295,28 @@ file=<image_file>
 
 ---
 
-## Security Best Practices
-
-✅ **DO:**
-- Use App Password (not regular Gmail password)
-- Store credentials in `.env` (not in code)
-- Validate recipient email before sending
-- Log all email sends for audit trail
-
-❌ **DON'T:**
-- Commit `.env` to git (it's in `.gitignore`)
-- Share Gmail credentials
-- Send sensitive data via unencrypted email
-- Use regular Gmail password for app
-
----
-
 ## Support
 
 For issues with Gmail integration:
-1. Check `.env` file configuration
-2. Review error messages in backend logs
-3. Verify Gmail App Password is correct
-4. Check recipient email format
+1. Check `.env` configuration
+2. Verify OAuth credentials file exists
+3. Check browser console for auth URL if popup doesn't open
+4. Review error messages in backend logs
 5. See Troubleshooting section above
 
 ---
 
-**Gmail integration is now part of AutoPost AI's AI Agent!** 🚀
+## Files Reference
+
+- `backend/social_apis.py` - Gmail OAuth 2.0 implementation
+- `backend/routes/agent.py` - Email endpoint
+- `backend/.env` - Configuration (not committed)
+- `backend/gmail_credentials.json` - OAuth credentials (not committed)
+- `backend/gmail_token.pickle` - Refresh token (not committed, auto-generated)
+
+---
+
+**Gmail OAuth 2.0 is now integrated into AutoPost AI's AI Agent!** 🚀
+
+
 

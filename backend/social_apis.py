@@ -122,72 +122,91 @@ async def post_to_linkedin(image_path: str, text: str, scheduled_time=None):
 
 # ==================== GMAIL ====================
 async def send_via_gmail(image_path: str, subject: str, body: str, recipient_email: str):
-    """Send email via Gmail with optional image attachment"""
+    """Send email via Gmail using OAuth 2.0"""
     try:
-        if not settings.GMAIL_FROM_EMAIL:
-            return {"success": False, "error": "Gmail not configured - set GMAIL_FROM_EMAIL in .env"}
+        import os
+        import pickle
+        from google.auth.transport.requests import Request
+        from google.oauth2.credentials import Credentials
+        from google_auth_oauthlib.flow import InstalledAppFlow
+        from googleapiclient.discovery import build
+        from googleapiclient.errors import HttpError
         
-        try:
-            import smtplib
-            import os
-            from dotenv import load_dotenv
+        SCOPES = ['https://www.googleapis.com/auth/gmail.send']
+        
+        # Get credentials
+        creds = None
+        token_path = settings.GMAIL_TOKEN_PATH
+        credentials_path = settings.GMAIL_CREDENTIALS_PATH
+        
+        # Load existing token
+        if os.path.exists(token_path):
+            with open(token_path, 'rb') as token:
+                creds = pickle.load(token)
+        
+        # If no valid credentials, request new ones
+        if not creds or not creds.valid:
+            if creds and creds.expired and creds.refresh_token:
+                creds.refresh(Request())
+            else:
+                if not os.path.exists(credentials_path):
+                    return {
+                        "success": False,
+                        "error": f"Gmail credentials file not found at {credentials_path}. Download from Google Cloud Console.",
+                        "platform": "gmail"
+                    }
+                
+                flow = InstalledAppFlow.from_client_secrets_file(
+                    credentials_path, SCOPES)
+                creds = flow.run_local_server(port=0)
             
-            load_dotenv()
+            # Save credentials for next time
+            with open(token_path, 'wb') as token:
+                pickle.dump(creds, token)
+        
+        # Build Gmail service
+        service = build('gmail', 'v1', credentials=creds)
+        
+        # Create message
+        msg = MIMEMultipart('related')
+        msg['Subject'] = subject
+        msg['From'] = settings.GMAIL_FROM_EMAIL
+        msg['To'] = recipient_email
+        
+        # Add body text
+        msg_alternative = MIMEMultipart('alternative')
+        msg.attach(msg_alternative)
+        msg_text = MIMEText(body, 'html')
+        msg_alternative.attach(msg_text)
+        
+        # Attach image if provided
+        if image_path and os.path.exists(image_path):
+            with open(image_path, 'rb') as attachment:
+                part = MIMEImage(attachment.read())
+                part.add_header('Content-Disposition', 'attachment', filename=os.path.basename(image_path))
+                msg.attach(part)
+        
+        # Send email
+        raw_message = base64.urlsafe_b64encode(msg.as_bytes()).decode()
+        send_message = {'raw': raw_message}
+        
+        result = service.users().messages().send(userId='me', body=send_message).execute()
+        
+        return {
+            "success": True,
+            "platform": "gmail",
+            "message_id": result.get('id'),
+            "subject": subject,
+            "recipient": recipient_email,
+            "has_attachment": bool(image_path and os.path.exists(image_path))
+        }
             
-            # Get Gmail credentials from environment
-            gmail_user = os.getenv("GMAIL_FROM_EMAIL")
-            gmail_password = os.getenv("GMAIL_APP_PASSWORD")  # Use App Password for Gmail
-            
-            if not gmail_user or not gmail_password:
-                return {
-                    "success": False, 
-                    "error": "Gmail credentials not fully configured. Set GMAIL_FROM_EMAIL and GMAIL_APP_PASSWORD in .env",
-                    "platform": "gmail"
-                }
-            
-            # Create message
-            msg = MIMEMultipart('related')
-            msg['Subject'] = subject
-            msg['From'] = gmail_user
-            msg['To'] = recipient_email
-            
-            # Add body text
-            msg_alternative = MIMEMultipart('alternative')
-            msg.attach(msg_alternative)
-            msg_text = MIMEText(body, 'html')
-            msg_alternative.attach(msg_text)
-            
-            # Attach image if provided
-            if image_path and os.path.exists(image_path):
-                with open(image_path, 'rb') as attachment:
-                    part = MIMEImage(attachment.read())
-                    part.add_header('Content-Disposition', 'attachment', filename=os.path.basename(image_path))
-                    msg.attach(part)
-            
-            # Send email via SMTP
-            server = smtplib.SMTP_SSL('smtp.gmail.com', 465)
-            server.login(gmail_user, gmail_password)
-            server.send_message(msg)
-            server.quit()
-            
-            return {
-                "success": True,
-                "platform": "gmail",
-                "message_id": f"gmail_{datetime.now().timestamp()}",
-                "subject": subject,
-                "recipient": recipient_email,
-                "has_attachment": bool(image_path and os.path.exists(image_path))
-            }
-        except smtplib.SMTPAuthenticationError:
-            return {
-                "success": False,
-                "error": "Gmail authentication failed. Check GMAIL_APP_PASSWORD",
-                "platform": "gmail",
-                "hint": "Use App Password, not your regular Gmail password"
-            }
-        except Exception as e:
-            return {"success": False, "error": str(e), "platform": "gmail"}
-            
+    except HttpError as error:
+        return {
+            "success": False,
+            "error": f"Gmail API error: {str(error)}",
+            "platform": "gmail"
+        }
     except Exception as e:
         return {"success": False, "error": str(e), "platform": "gmail"}
 
