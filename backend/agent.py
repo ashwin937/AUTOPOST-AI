@@ -33,9 +33,12 @@ class PostingAgent:
             "tone": "professional",
             "has_image": False,
             "image_path": None,
-            "post_type": None,
+            "post_type": None,  # "immediate", "scheduled", or "email"
             "scheduled_time": None,
-            "recipient_email": None
+            "recipient_email": None,
+            "email_subject": None,
+            "email_body": None,
+            "action_type": None  # "post_social", "send_email", or None
         }
     
     def process_user_input(self, user_message: str) -> dict:
@@ -43,7 +46,7 @@ class PostingAgent:
         Process user input and return agent response with actions
         Returns: {
             "response": "Agent message to user",
-            "action": "ask_for_image" | "ready_to_post" | "ask_for_schedule" | "confirm_post" | None,
+            "action": "ask_for_image" | "ready_to_post" | "ask_for_schedule" | "confirm_post" | "ask_for_email" | None,
             "context": current_context,
             "next_step": "..."
         }
@@ -55,35 +58,41 @@ class PostingAgent:
         })
         
         # Build system prompt
-        system_prompt = f"""You are a helpful social media posting assistant. Your job is to guide users through posting content to social media platforms.
+        system_prompt = f"""You are a helpful social media and email content assistant. Your job is to guide users through posting content to social media platforms or sending emails.
 
 Current Context:
 - Selected Platforms: {', '.join(self.current_context['platforms']) if self.current_context['platforms'] else 'None yet'}
+- Email Recipient: {self.current_context['recipient_email'] or 'Not set'}
 - Content Tone: {self.current_context['tone']}
 - Has Image: {self.current_context['has_image']}
-- Post Type: {self.current_context['post_type'] or 'Not decided yet'}
+- Has Image: {self.current_context['has_image']}
+- Action Type: {self.current_context['action_type'] or 'Not decided yet'}
 
 Your task:
-1. Parse the user's intent (do they want to post, schedule, or modify settings?)
-2. Ask for missing information (image, platforms, tone, timing)
-3. Confirm details before posting
+1. Parse the user's intent (do they want to post to social media, send an email, or modify settings?)
+2. Ask for missing information (image, platforms/email, recipient, tone, timing)
+3. Confirm details before posting/sending
 4. Be friendly, concise, and guide them step by step
 
 Guidelines:
-- If they mention posting to Instagram, Facebook, LinkedIn, or Gmail, note those platforms
+- If they mention posting to Instagram, Facebook, LinkedIn - note those as social platforms
+- If they mention "send email", "email to", "mail to" - that's email action (ask for recipient email)
 - If they mention "casual", "funny", "professional", "inspirational" - that's the tone
-- If they say "now", "immediately", "right away" - that's immediate posting
+- If they say "now", "immediately", "right away" - that's immediate action
 - If they say "schedule", "later", "tomorrow", "2pm" - that's scheduled posting
-- Always ask for image if they haven't provided one yet
+- Always ask for image if they haven't provided one yet (for social media)
+- For email: Ask for recipient email first, then optional image attachment
 - Keep responses short (1-2 sentences max)
 
 Return your response in JSON format:
 {{
     "message": "Your response to the user",
     "platforms": ["instagram", "facebook", "linkedin"],  // updated platforms if user mentioned any
+    "action_type": "post_social" | "send_email" | null,  // what user wants to do
     "tone": "professional",  // updated tone if user mentioned any
     "post_type": "immediate",  // "immediate" or "scheduled" if user specified
-    "action": "ask_for_image" | "ready_to_post" | "ask_for_schedule" | "confirm" | null,
+    "recipient_email": null,  // for email actions
+    "action": "ask_for_image" | "ask_for_email" | "ready_to_post" | "ask_for_schedule" | "confirm" | null,
     "needs_image": true/false,
     "next_step": "User should upload image, Select more platforms, Confirm details, etc"
 }}"""

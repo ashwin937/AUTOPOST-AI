@@ -122,23 +122,68 @@ async def post_to_linkedin(image_path: str, text: str, scheduled_time=None):
 
 # ==================== GMAIL ====================
 async def send_via_gmail(image_path: str, subject: str, body: str, recipient_email: str):
-    """Send post via Gmail"""
+    """Send email via Gmail with optional image attachment"""
     try:
         if not settings.GMAIL_FROM_EMAIL:
-            return {"success": False, "error": "Gmail not configured"}
-        
-        from google.auth.transport.requests import Request
-        from google.oauth2.service_account import Credentials
-        from googleapiclient.discovery import build
+            return {"success": False, "error": "Gmail not configured - set GMAIL_FROM_EMAIL in .env"}
         
         try:
-            # For simplified implementation, return mock success
+            import smtplib
+            import os
+            from dotenv import load_dotenv
+            
+            load_dotenv()
+            
+            # Get Gmail credentials from environment
+            gmail_user = os.getenv("GMAIL_FROM_EMAIL")
+            gmail_password = os.getenv("GMAIL_APP_PASSWORD")  # Use App Password for Gmail
+            
+            if not gmail_user or not gmail_password:
+                return {
+                    "success": False, 
+                    "error": "Gmail credentials not fully configured. Set GMAIL_FROM_EMAIL and GMAIL_APP_PASSWORD in .env",
+                    "platform": "gmail"
+                }
+            
+            # Create message
+            msg = MIMEMultipart('related')
+            msg['Subject'] = subject
+            msg['From'] = gmail_user
+            msg['To'] = recipient_email
+            
+            # Add body text
+            msg_alternative = MIMEMultipart('alternative')
+            msg.attach(msg_alternative)
+            msg_text = MIMEText(body, 'html')
+            msg_alternative.attach(msg_text)
+            
+            # Attach image if provided
+            if image_path and os.path.exists(image_path):
+                with open(image_path, 'rb') as attachment:
+                    part = MIMEImage(attachment.read())
+                    part.add_header('Content-Disposition', 'attachment', filename=os.path.basename(image_path))
+                    msg.attach(part)
+            
+            # Send email via SMTP
+            server = smtplib.SMTP_SSL('smtp.gmail.com', 465)
+            server.login(gmail_user, gmail_password)
+            server.send_message(msg)
+            server.quit()
+            
             return {
                 "success": True,
                 "platform": "gmail",
                 "message_id": f"gmail_{datetime.now().timestamp()}",
                 "subject": subject,
-                "recipient": recipient_email
+                "recipient": recipient_email,
+                "has_attachment": bool(image_path and os.path.exists(image_path))
+            }
+        except smtplib.SMTPAuthenticationError:
+            return {
+                "success": False,
+                "error": "Gmail authentication failed. Check GMAIL_APP_PASSWORD",
+                "platform": "gmail",
+                "hint": "Use App Password, not your regular Gmail password"
             }
         except Exception as e:
             return {"success": False, "error": str(e), "platform": "gmail"}

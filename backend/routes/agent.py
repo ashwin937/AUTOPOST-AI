@@ -253,6 +253,76 @@ async def agent_schedule(scheduled_time: str = Form(...), db: Session = Depends(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.post("/send-email")
+async def agent_send_email(
+    recipient_email: str = Form(...),
+    subject: str = Form(default=""),
+    custom_body: str = Form(default=""),
+    db: Session = Depends(get_db)
+):
+    """
+    Send email from agent context with AI-generated content
+    User can provide custom subject/body or let AI generate them
+    """
+    try:
+        agent = get_agent()
+        context = agent.get_context()
+        
+        if not context["has_image"]:
+            raise HTTPException(status_code=400, detail="No image uploaded. Please upload an image first.")
+        
+        image_path = context["image_path"]
+        
+        # Generate email content if not provided
+        if not subject or not custom_body:
+            image_description = context.get("image_description", "Professional content")
+            generated = generate_platform_content(image_description, ["gmail"], context["tone"])
+            
+            subject = subject or generated.get("gmail_subject", "Check this out!")
+            custom_body = custom_body or generated.get("gmail_body", "I wanted to share this with you.")
+        
+        # Send email
+        result = await send_via_gmail(
+            image_path,
+            subject,
+            custom_body,
+            recipient_email
+        )
+        
+        # Save to database
+        post_id = str(uuid.uuid4())
+        db_post = SocialPost(
+            id=post_id,
+            image_path=image_path,
+            original_description=context.get("image_description", ""),
+            gmail_subject=subject,
+            gmail_body=custom_body,
+            status="sent" if result["success"] else "failed",
+            tone=context["tone"]
+        )
+        db.add(db_post)
+        db.commit()
+        db.refresh(db_post)
+        
+        # Reset agent for next action
+        reset_agent()
+        
+        if result["success"]:
+            return {
+                "success": True,
+                "message_id": result.get("message_id"),
+                "recipient": recipient_email,
+                "subject": subject,
+                "message": f"✅ Email sent successfully to {recipient_email}!"
+            }
+        else:
+            raise HTTPException(status_code=500, detail=result.get("error", "Failed to send email"))
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.post("/reset")
 async def agent_reset():
     """Reset agent for a new conversation"""
