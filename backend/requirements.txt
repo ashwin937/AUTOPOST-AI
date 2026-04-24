@@ -1,20 +1,39 @@
+# ===================== WEB FRAMEWORK =====================
 fastapi
 uvicorn
-chromadb
-sentence-transformers
-google-generativeai
 python-dotenv
 pydantic
-pillow
-aiofiles
-python-multipart
-facebook-sdk
+pydantic-settings
+
+# ===================== AUTHENTICATION & SECURITY =====================
+# JWT Token Support
+PyJWT
+
+# OAuth 2.0 Support
 google-auth-oauthlib
 google-auth-httplib2
-google-api-python-client
-instagrapi
+python-multipart
+
+# ===================== AI & CONTENT GENERATION =====================
+google-generativeai
+sentence-transformers
+chromadb
+
+# ===================== SOCIAL MEDIA APIS =====================
+# Facebook Graph API
+facebook-sdk
+# LinkedIn
 linkedin-api
-schedule
+# Instagram
+instagrapi
+# Google Gmail
+google-api-python-client
+
+# ===================== UTILITIES =====================
+pillow
+aiofiles
 httpx
+requests
+schedule
 sqlalchemy
-pydantic-settings
+
